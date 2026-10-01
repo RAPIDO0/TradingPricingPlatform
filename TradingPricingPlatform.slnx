@@ -1,0 +1,16 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/TradingPricing.Application/TradingPricing.Application.csproj" />
+    <Project Path="src/TradingPricing.Core/TradingPricing.Core.csproj" />
+    <Project Path="src/TradingPricing.Instruments/TradingPricing.Instruments.csproj" />
+    <Project Path="src/TradingPricing.MarketData/TradingPricing.MarketData.csproj" />
+    <Project Path="src/TradingPricing.Pricing/TradingPricing.Pricing.csproj" />
+    <Project Path="src/TradingPricing.Risk/TradingPricing.Risk.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/TradingPricing.Core.Tests/TradingPricing.Core.Tests.csproj" />
+    <Project Path="tests/TradingPricing.MarketData.Tests/TradingPricing.MarketData.Tests.csproj" />
+    <Project Path="tests/TradingPricing.Pricing.Tests/TradingPricing.Pricing.Tests.csproj" />
+    <Project Path="tests/TradingPricing.Risk.Tests/TradingPricing.Risk.Tests.csproj" />
+  </Folder>
+</Solution>

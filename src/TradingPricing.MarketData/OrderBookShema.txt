@@ -1,0 +1,20 @@
+﻿             SubmitOrder
+                  |
+                  v
+        +-------------------+
+        |   Matching loop   |
+        +-------------------+
+          |              |
+       match           no match
+          |              |
+          v              v
+       Trade        AddRestingOrder
+          |
+          v
+      ApplyFill
+          |
+     +----+----+
+     |         |
+  Filled   Partial
+     |
+RemoveFromBook
