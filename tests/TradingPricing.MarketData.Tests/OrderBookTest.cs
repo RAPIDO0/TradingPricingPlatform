@@ -349,4 +349,95 @@ public class OrderBookTests
             () => orderBook.SubmitOrder(reusedOrder)
         );
     }
+
+    [Fact]
+    public void SubmitOrder_WhenTradeOccurs_RaisesTradeExecuted()
+    {
+        var orderBook = new OrderBook(Aapl);
+
+        Trade? receivedTrade = null;
+
+        orderBook.TradeExecuted += trade =>
+        {
+            receivedTrade = trade;
+        };
+
+        var sellOrder = new Order(
+            id: 1,
+            symbol: Aapl,
+            price: new Price(100m),
+            quantity: new Quantity(50),
+            side: OrderSide.Sell
+        );
+
+        var buyOrder = new Order(
+            id: 2,
+            symbol: Aapl,
+            price: new Price(101m),
+            quantity: new Quantity(50),
+            side: OrderSide.Buy
+        );
+
+        orderBook.SubmitOrder(sellOrder);
+        orderBook.SubmitOrder(buyOrder);
+
+        Assert.NotNull(receivedTrade);
+        Assert.Equal(new Price(100m), receivedTrade!.Price);
+        Assert.Equal(new Quantity(50), receivedTrade.Quantity);
+    }
+
+    [Fact]
+    public void CancelOrder_WhenOrderExists_RaisesOrderCancelled()
+    {
+        var orderBook = new OrderBook(Aapl);
+
+        Order? cancelledOrder = null;
+
+        orderBook.OrderCancelled += order =>
+        {
+            cancelledOrder = order;
+        };
+
+        var buyOrder = new Order(
+            id: 1,
+            symbol: Aapl,
+            price: new Price(100m),
+            quantity: new Quantity(50),
+            side: OrderSide.Buy
+        );
+
+        orderBook.SubmitOrder(buyOrder);
+
+        bool result = orderBook.CancelOrder(1);
+
+        Assert.True(result);
+        Assert.NotNull(cancelledOrder);
+        Assert.Equal(1, cancelledOrder!.Id);
+        Assert.Equal(OrderStatus.Cancelled, cancelledOrder.Status);
+    }
+
+    [Fact]
+    public void SubmitOrder_WhenBookChanges_RaisesOrderBookChanged()
+    {
+        var orderBook = new OrderBook(Aapl);
+
+        int eventCount = 0;
+
+        orderBook.OrderBookChanged += () =>
+        {
+            eventCount++;
+        };
+
+        var buyOrder = new Order(
+            id: 1,
+            symbol: Aapl,
+            price: new Price(100m),
+            quantity: new Quantity(50),
+            side: OrderSide.Buy
+        );
+
+        orderBook.SubmitOrder(buyOrder);
+
+        Assert.True(eventCount > 0);
+    }
 }

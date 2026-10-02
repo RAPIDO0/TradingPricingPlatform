@@ -1,40 +1,81 @@
-﻿using TradingPricing.Core.Market;
+﻿//using TradingPricing.Core.Market;
+//using TradingPricing.MarketData;
+
+//Console.WriteLine("Hello, World!");
+//var aapl = new Symbol("AAPL");
+
+//var orderBook = new OrderBook(aapl);
+
+//orderBook.TradeExecuted += trade =>
+//{
+//    Console.WriteLine(
+//        $"TRADE: {trade.Quantity.Value} AAPL @ {trade.Price.Value}"
+//    );
+//};
+
+//orderBook.OrderCancelled += order =>
+//{
+//    Console.WriteLine(
+//        $"ORDER CANCELLED: {order.Id}"
+//    );
+//};
+
+//var sellOrder = new Order(
+//    id: 1,
+//    symbol: aapl,
+//    price: new Price(100m),
+//    quantity: new Quantity(50),
+//    side: OrderSide.Sell
+//);
+
+//var buyOrder = new Order(
+//    id: 2,
+//    symbol: aapl,
+//    price: new Price(101m),
+//    quantity: new Quantity(50),
+//    side: OrderSide.Buy
+//);
+
+//orderBook.SubmitOrder(sellOrder);
+//orderBook.SubmitOrder(buyOrder);
+
+using TradingPricing.Core.Market;
 using TradingPricing.MarketData;
 
-Console.WriteLine("Hello, World!");
-var aapl = new Symbol("AAPL");
+var symbol = new Symbol("AAPL");
 
-var orderBook = new OrderBook(aapl);
+var orderBook = new OrderBook(symbol);
+var processor = new OrderProcessor(orderBook);
 
 orderBook.TradeExecuted += trade =>
 {
     Console.WriteLine(
-        $"TRADE: {trade.Quantity.Value} AAPL @ {trade.Price.Value}"
+        $"TRADE {trade.Quantity.Value} @ {trade.Price.Value}"
     );
 };
 
-orderBook.OrderCancelled += order =>
-{
-    Console.WriteLine(
-        $"ORDER CANCELLED: {order.Id}"
-    );
-};
+Task processingTask = processor.RunAsync();
 
-var sellOrder = new Order(
-    id: 1,
-    symbol: aapl,
-    price: new Price(100m),
-    quantity: new Quantity(50),
-    side: OrderSide.Sell
+await processor.SubmitAsync(
+    new Order(
+        1,
+        symbol,
+        new Price(100m),
+        new Quantity(50),
+        OrderSide.Sell
+    )
 );
 
-var buyOrder = new Order(
-    id: 2,
-    symbol: aapl,
-    price: new Price(101m),
-    quantity: new Quantity(50),
-    side: OrderSide.Buy
+await processor.SubmitAsync(
+    new Order(
+        2,
+        symbol,
+        new Price(101m),
+        new Quantity(50),
+        OrderSide.Buy
+    )
 );
 
-orderBook.SubmitOrder(sellOrder);
-orderBook.SubmitOrder(buyOrder);
+processor.Complete();
+
+await processingTask;
