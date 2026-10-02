@@ -1,28 +1,22 @@
-﻿using System.Collections.Concurrent;
-using TradingPricing.Core.Market;
+﻿using TradingPricing.Core.Market;
 
 namespace TradingPricing.MarketData;
 
 public class OrderBook
 {
-    private object _lock = new object();
-    private readonly SemaphoreSlim _semaphore = new(1, 1);
     private readonly SortedDictionary<Price, LinkedList<Order>> _buyOrders;
     private readonly SortedDictionary<Price, LinkedList<Order>> _sellOrders;
 
     private readonly Dictionary<long, OrderLocation> _ordersById;
-
     private readonly HashSet<long> _knownOrderIds;
-
-    public event Action<Trade>? TradeExecuted;
-
-    public event Action<Order>? OrderCancelled;
-
-    public event Action? OrderBookChanged;
 
     private long _nextTradeId = 1;
 
     public Symbol Symbol { get; }
+
+    public event Action<Trade>? TradeExecuted;
+    public event Action<Order>? OrderCancelled;
+    public event Action? OrderBookChanged;
 
     public OrderBook(Symbol symbol)
     {
@@ -44,45 +38,17 @@ public class OrderBook
         _knownOrderIds = new HashSet<long>();
     }
 
-    public Order? BestBuy
-    {
-        get
-        {
-            if (_buyOrders.Count == 0)
-                return null;
+    public Order? BestBuy =>
+        _buyOrders.Count == 0
+            ? null
+            : _buyOrders.First().Value.First?.Value;
 
-            return _buyOrders.First().Value.First?.Value;
-        }
-    }
+    public Order? BestSell =>
+        _sellOrders.Count == 0
+            ? null
+            : _sellOrders.First().Value.First?.Value;
 
-    public Order? BestSell
-    {
-        get
-        {
-            if (_sellOrders.Count == 0)
-                return null;
-
-            return _sellOrders.First().Value.First?.Value;
-        }
-    }
-
-    public async Task<IReadOnlyList<Trade>> SubmitOrderAsync(
-    Order order,
-    CancellationToken cancellationToken = default)
-    {
-        await _semaphore.WaitAsync(cancellationToken);
-
-        try
-        {
-            return SubmitOrderInternal(order);
-        }
-        finally
-        {
-            _semaphore.Release();
-        }
-    }
-
-    public IReadOnlyList<Trade> SubmitOrderInternal(Order order)
+    public IReadOnlyList<Trade> SubmitOrder(Order order)
     {
         ValidateOrder(order);
 
@@ -111,9 +77,9 @@ public class OrderBook
             restingOrder.ApplyFill(quantity);
 
             Trade trade = CreateTrade(
-                incomingOrder: order,
-                restingOrder: restingOrder,
-                quantity: quantity
+                order,
+                restingOrder,
+                quantity
             );
 
             trades.Add(trade);
@@ -134,24 +100,7 @@ public class OrderBook
         return trades;
     }
 
-
-    public async Task<bool> CancelOrderAsync(long orderId, CancellationToken cancellationToken = default)
-    {
-        await _semaphore.WaitAsync(cancellationToken);
-
-        try
-        {
-            return CancelOrderInternal(orderId);
-        }
-        finally
-        {
-            _semaphore.Release();
-        }
-    }
-
-
-
-    private bool CancelOrderInternal(long orderId)
+    public bool CancelOrder(long orderId)
     {
         if (!_ordersById.TryGetValue(orderId, out var location))
             return false;
@@ -163,11 +112,9 @@ public class OrderBook
         if (!side.TryGetValue(location.Price, out var ordersAtPrice))
             return false;
 
-        var order = location.Node.Value;
+        Order order = location.Node.Value;
 
         order.Cancel();
-
-        OrderCancelled?.Invoke(order);
 
         ordersAtPrice.Remove(location.Node);
         _ordersById.Remove(orderId);
@@ -176,6 +123,9 @@ public class OrderBook
         {
             side.Remove(location.Price);
         }
+
+        OrderCancelled?.Invoke(order);
+        OrderBookChanged?.Invoke();
 
         return true;
     }
@@ -192,7 +142,8 @@ public class OrderBook
             side[order.Price] = ordersAtPrice;
         }
 
-        LinkedListNode<Order> node = ordersAtPrice.AddLast(order);
+        LinkedListNode<Order> node =
+            ordersAtPrice.AddLast(order);
 
         _ordersById.Add(
             order.Id,
@@ -202,6 +153,34 @@ public class OrderBook
                 node
             )
         );
+
+        OrderBookChanged?.Invoke();
+    }
+
+    private void RemoveFilledOrder(Order order)
+    {
+        if (!_ordersById.TryGetValue(order.Id, out var location))
+        {
+            throw new InvalidOperationException(
+                $"Order {order.Id} was not found in the order book."
+            );
+        }
+
+        var side = location.Side == OrderSide.Buy
+            ? _buyOrders
+            : _sellOrders;
+
+        LinkedList<Order> ordersAtPrice =
+            side[location.Price];
+
+        ordersAtPrice.Remove(location.Node);
+
+        _ordersById.Remove(order.Id);
+
+        if (ordersAtPrice.Count == 0)
+        {
+            side.Remove(location.Price);
+        }
 
         OrderBookChanged?.Invoke();
     }
@@ -217,14 +196,9 @@ public class OrderBook
         Order incomingOrder,
         Order restingOrder)
     {
-        if (incomingOrder.Side == OrderSide.Buy)
-        {
-            return incomingOrder.Price.Value
-                   >= restingOrder.Price.Value;
-        }
-
-        return incomingOrder.Price.Value
-               <= restingOrder.Price.Value;
+        return incomingOrder.Side == OrderSide.Buy
+            ? incomingOrder.Price.Value >= restingOrder.Price.Value
+            : incomingOrder.Price.Value <= restingOrder.Price.Value;
     }
 
     private Trade CreateTrade(
@@ -257,36 +231,12 @@ public class OrderBook
         );
     }
 
-    private void RemoveFilledOrder(Order order)
-    {
-        if (!_ordersById.TryGetValue(order.Id, out var location))
-            throw new InvalidOperationException(
-                $"Order {order.Id} was not found in the order book."
-            );
-
-        var side = location.Side == OrderSide.Buy
-            ? _buyOrders
-            : _sellOrders;
-
-        var ordersAtPrice = side[location.Price];
-
-        ordersAtPrice.Remove(location.Node);
-        _ordersById.Remove(order.Id);
-
-        if (ordersAtPrice.Count == 0)
-        {
-            side.Remove(location.Price);
-        }
-
-        OrderBookChanged?.Invoke();
-    }
-
     private void ValidateOrder(Order order)
     {
         if (order.Symbol != Symbol)
         {
             throw new InvalidOperationException(
-                $"Order symbol {order.Symbol} does not match order book symbol {Symbol}."
+                $"Order symbol {order.Symbol} does not match book symbol {Symbol}."
             );
         }
 
