@@ -1,10 +1,12 @@
-﻿using TradingPricing.Core.Market;
+﻿using System.Collections.Concurrent;
+using TradingPricing.Core.Market;
 
 namespace TradingPricing.MarketData;
 
 public class OrderBook
 {
     private object _lock = new object();
+    private readonly SemaphoreSlim _semaphore = new(1, 1);
     private readonly SortedDictionary<Price, LinkedList<Order>> _buyOrders;
     private readonly SortedDictionary<Price, LinkedList<Order>> _sellOrders;
 
@@ -64,13 +66,20 @@ public class OrderBook
         }
     }
 
-    public IReadOnlyList<Trade> SubmitOrder(Order order)
+    public async Task<IReadOnlyList<Trade>> SubmitOrderAsync(
+    Order order,
+    CancellationToken cancellationToken = default)
     {
-        lock(_lock)
+        await _semaphore.WaitAsync(cancellationToken);
+
+        try
         {
             return SubmitOrderInternal(order);
         }
-        
+        finally
+        {
+            _semaphore.Release();
+        }
     }
 
     public IReadOnlyList<Trade> SubmitOrderInternal(Order order)
@@ -126,7 +135,23 @@ public class OrderBook
     }
 
 
-    public bool CancelOrder(long orderId)
+    public async Task<bool> CancelOrderAsync(long orderId, CancellationToken cancellationToken = default)
+    {
+        await _semaphore.WaitAsync(cancellationToken);
+
+        try
+        {
+            return CancelOrderInternal(orderId);
+        }
+        finally
+        {
+            _semaphore.Release();
+        }
+    }
+
+
+
+    private bool CancelOrderInternal(long orderId)
     {
         if (!_ordersById.TryGetValue(orderId, out var location))
             return false;
