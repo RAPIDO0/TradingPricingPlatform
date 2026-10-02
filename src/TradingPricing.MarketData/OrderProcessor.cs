@@ -14,7 +14,7 @@ public sealed class OrderProcessor
         _channel = Channel.CreateUnbounded<Order>(
             new UnboundedChannelOptions
             {
-                SingleReader = true,
+                SingleReader = false,
                 SingleWriter = false
             }
         );
@@ -30,8 +30,22 @@ public sealed class OrderProcessor
         );
     }
 
-    public async Task RunAsync(
+    public async Task RunWorkersAsync(
+        int workerCount,
         CancellationToken cancellationToken = default)
+    {
+        var workers = new Task[workerCount];
+
+        for (int i = 0; i < workerCount; i++)
+        {
+            workers[i] = ConsumeAsync(cancellationToken);
+        }
+
+        await Task.WhenAll(workers);
+    }
+
+    private async Task ConsumeAsync(
+        CancellationToken cancellationToken)
     {
         await foreach (
             Order order in _channel.Reader.ReadAllAsync(cancellationToken))

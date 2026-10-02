@@ -4,6 +4,7 @@ namespace TradingPricing.MarketData;
 
 public class OrderBook
 {
+    private object _lock = new object();
     private readonly SortedDictionary<Price, LinkedList<Order>> _buyOrders;
     private readonly SortedDictionary<Price, LinkedList<Order>> _sellOrders;
 
@@ -65,6 +66,15 @@ public class OrderBook
 
     public IReadOnlyList<Trade> SubmitOrder(Order order)
     {
+        lock(_lock)
+        {
+            return SubmitOrderInternal(order);
+        }
+        
+    }
+
+    public IReadOnlyList<Trade> SubmitOrderInternal(Order order)
+    {
         ValidateOrder(order);
 
         _knownOrderIds.Add(order.Id);
@@ -114,6 +124,7 @@ public class OrderBook
 
         return trades;
     }
+
 
     public bool CancelOrder(long orderId)
     {
